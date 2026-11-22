@@ -1,0 +1,34 @@
+---
+title: "Obmep Analise"
+author: "Daniel"
+date: "2023-10-01"
+output: html_document
+---
+
+```{r}
+source("Scripts/packages.R")
+
+dados = readxl::read_excel("Bancos/dados_completos.xlsx")
+
+#Se deseja usar os poligonos nos mapas
+source("Scripts/load_poligonos.R")
+```
+
+```{r}
+##HEATMAP
+
+dados_graph = dados %>% na.omit() %>% filter(MEDALHA == "Ouro") %>% group_by(LATITUDE, LONGITUDE) %>% 
+  summarise(count = n()) %>% ungroup() %>% na.omit()
+
+leaflet(dados_graph) %>%
+  addTiles() %>%
+  addHeatmap(
+    ~LATITUDE, ~LONGITUDE, 
+    intensity = ~sqrt(count),
+    blur = 10, max = ~max(sqrt(count))
+  ) -> mapa_gradient
+
+htmlwidgets::saveWidget(mapa_gradient, "Mapas/gradient.html")
+```
+
+

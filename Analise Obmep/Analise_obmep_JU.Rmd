@@ -1,0 +1,291 @@
+---
+title: "ju-analiseobmep"
+author: "Julia_Vidoto"
+date: '2023-10-24'
+output: html_document
+---
+```{r}
+library(tidyverse)
+library(readxl)
+library(leaflet)
+library(leaflet.extras)
+
+#setwd("C:/Users/danie/OneDrive/Área de Trabalho/Projetos R/Analise Obmep/Analise Obmep")
+dados = read_excel("Bancos/dados_completos.xlsx")
+```
+
+```{r}
+dados_graph = dados %>% 
+  na.omit() %>% 
+  filter(MEDALHA == "Ouro") %>% 
+  group_by(LATITUDE, LONGITUDE) %>% 
+  summarise(count = n()) %>% 
+  ungroup() %>% 
+  na.omit()
+
+leaflet(dados_graph) %>%
+  addTiles() %>%
+  addHeatmap(
+    ~LATITUDE, ~LONGITUDE, 
+    intensity = ~sqrt(count),
+    blur = 10, max = ~max(sqrt(count))
+  ) -> mapa_gradient
+
+print(mapa_gradient)
+
+```
+
+```{r}
+colnames(dados)
+```
+
+```{r}
+dados %>% filter(is.na(GENERO)) %>% select(PRIMEIRO_NOME, MUNICIPIO) %>% count(MUNICIPIO) #nomes estranhos por municipio
+```
+
+# Tipo de escola
+```{r numero de medalhas por tipo de escola publica}
+dados %>% 
+  #filter(ESTRUTURA_ESCOLA=="Pública") %>% 
+  group_by(TIPO_ESCOLA, MEDALHA) %>% 
+  summarise(n=n()) %>% 
+  ungroup() %>% 
+  ggplot()+
+  geom_bar(aes(x = TIPO_ESCOLA, y=n, fill = MEDALHA), stat = "identity")+
+  facet_wrap(MEDALHA ~ .)
+```
+
+# Infos gerais
+```{r numero de medalha por ano por nivel}
+dados %>% 
+  select(MEDALHA,NIVEL,ANO) %>% 
+  group_by(ANO, NIVEL, MEDALHA) %>% 
+  summarise(total = n()) %>% 
+  ggplot(aes(x = as.numeric(ANO), y=total, col = as.factor(MEDALHA)))+
+  geom_line()+
+  facet_wrap(.~NIVEL)
+```
+
+# Análise por sexo
+
+```{r}
+#proporção mulheres top10 medalha d eouro
+dados %>% 
+  filter(POSICAO<11, MEDALHA == "Ouro") %>% 
+  group_by(GENERO) %>% 
+  summarise(n = n())
+#proporção mulheres geral
+dados %>% 
+  filter(MEDALHA =="Ouro") %>% 
+  group_by(GENERO) %>% 
+  summarise(n = n())
+
+6550/1688 #3.9 - proporção H/M no geral
+576/84 #6.9 - proporção H/M no top10 ouro
+
+#proporção mulheres por estado
+dados %>% 
+  filter(POSICAO<11, MEDALHA == "Ouro") %>% 
+  group_by(GENERO, UF) %>% 
+  summarise(n = n())
+
+#propporção - precisa fazer em forma de mapa ?
+dados %>% 
+  filter(MEDALHA =="Ouro") %>% 
+  group_by(GENERO, UF) %>% 
+  summarise(n = n()) %>% 
+  pivot_wider(names_from = GENERO, values_from=n) %>% 
+  mutate(prop = `F`/(M+`F`))
+
+anos = list()
+
+for (i in sort(unique(dados$ANO))){
+  dados %>% 
+    filter(ANO== i) %>% 
+    group_by(GENERO, MEDALHA) %>% 
+    drop_na() %>% 
+    summarise(n = n()) %>% 
+    ungroup() %>% 
+    pivot_wider(names_from = GENERO, values_from=n) %>% 
+    mutate(prop = `F`/(M+`F`)) -> anos[[i]]
+  anos[[i]]$ANO=i
+}
+
+anos=do.call(rbind,anos)
+print(anos)
+
+anos %>% 
+  ggplot()+
+  geom_line(aes(x = ANO, y=prop, col = MEDALHA))
+  
+
+dados %>% filter(ANO==2013) %>% group_by(MEDALHA) %>% summarise(n=n())
+```
+
+
+```{r}
+anos = list()
+
+for (i in sort(unique(dados$ANO))){
+  dados %>% 
+    filter(ANO== i) %>% 
+    group_by(GENERO, MEDALHA, NIVEL) %>% 
+    drop_na() %>% 
+    summarise(n = n()) %>% 
+    pivot_wider(names_from = GENERO, values_from=n) %>% 
+    mutate(prop = `F`/(M+`F`)) -> anos[[i]]
+  anos[[i]]$ANO=i
+}
+
+anos=do.call(rbind,anos)
+print(anos)
+
+colnames(anos)
+
+anos %>% 
+  ggplot()+
+  geom_line(aes(x = ANO, y=prop, col = MEDALHA))+
+  facet_wrap(NIVEL ~ .)
+```
+
+# Infência do IDH
+```{r}
+dados %>% 
+  filter(MEDALHA=="Ouro", POSICAO <11, ESTRUTURA_ESCOLA=="Pública") -> dadosx
+
+plot(dadosx$`IDHM Renda 2010`~dadosx$POSICAO)
+
+dadosx %>% 
+  filter(MEDALHA=="Ouro", POSICAO <11, ESTRUTURA_ESCOLA=="Pública") %>% 
+  ggplot()+
+  geom_boxplot(aes(x = as.character(POSICAO), y=`IDHM 2010`, fill=as.character(POSICAO)))
+
+
+dados %>% 
+  select(`IDHM 2010`, MUNICIPIO) %>% 
+  group_by(MUNICIPIO) %>% 
+  summarise(n=n(), idh_medio = mean(`IDHM 2010`)) %>% 
+  #filter(n<1000) %>% 
+  arrange(desc(n)) %>% 
+  ggplot()+
+  geom_point(aes(x=log(n), y=(idh_medio)))
+  
+  
+```
+
+```{r}
+to_add = function(vetor){
+  for(n in 1:length(vetor)){
+    if((n %% 3) == 1){
+      vetor[n] = vetor[n+1] + vetor[n+2]
+    }
+    if((n %% 3) == 2){
+      vetor[n] = vetor[n+1]
+    }
+    if((n %% 3) == 0){
+      vetor[n] = 0
+    }
+  }
+  return(vetor)
+}
+
+dados_new = dados
+dados_new$MEDALHA = factor(dados_new$MEDALHA, levels = c("Bronze", "Prata", "Ouro"))
+dados_new$GENERO = factor(dados_new$GENERO, levels = c("M", "F"))
+dados_new$TIPO_ESCOLA = factor(dados_new$TIPO_ESCOLA, levels = c("C","M", "E", "P", "F"))
+
+dados_new = dados_new %>% group_by(ANO, NIVEL, MEDALHA) %>% summarise(count = n()) %>% ungroup() %>% 
+  mutate(ADICIONAR = to_add(count)) %>% dplyr::select(-count) %>% right_join(dados_new, by = join_by(
+    ANO, NIVEL, MEDALHA
+  )) %>% mutate(POSICAO_ABSOLUTA = POSICAO + ADICIONAR) %>% dplyr::select(-ADICIONAR) %>% 
+  arrange(desc(ANO), desc(MEDALHA), POSICAO_ABSOLUTA)
+
+colnames(dados_new) = c("ANO", "NIVEL", "MEDALHA", "POSICAO", "NOME", "PRIMEIRO_NOME", "GENERO", "PROPORCAO_GENERO",
+                        "ESCOLA", "ESTRUTURA_ESCOLA", "TIPO_ESCOLA", "CODIGO_MUNICIPIO", "AREA_MUNICIPIO", "MUNICIPIO",
+                        "UF", "LATITUDE", "LONGITUDE", "ID_CIDADE", "IDH", "IDH_RENDA", "IDH_LONGEVIDADE", "IDH_EDUCACAO",
+                        "CODIGO_MUNICIPIO_2", "AREA_MUNICIPIO_2", "POSICAO_ABSOLUTA")
+
+dados_new = dados_new %>% dplyr::select(-c(CODIGO_MUNICIPIO_2, AREA_MUNICIPIO_2))
+
+dados_modelar = dados_new %>% dplyr::select(ANO, NIVEL, POSICAO_ABSOLUTA, GENERO, TIPO_ESCOLA, IDH, 
+                                     IDH_RENDA, IDH_LONGEVIDADE, IDH_EDUCACAO) %>% 
+  mutate(
+    GENERO_F = as.integer(GENERO == "F"),
+    TIPO_ESCOLA_M = as.integer(TIPO_ESCOLA == "M"),
+    TIPO_ESCOLA_E = as.integer(TIPO_ESCOLA == "E"),
+    TIPO_ESCOLA_C = as.integer(TIPO_ESCOLA == "C"),
+    TIPO_ESCOLA_F = as.integer(TIPO_ESCOLA == "F")
+  ) %>%
+  dplyr::select(-GENERO, -TIPO_ESCOLA) 
+```
+
+```{r}
+lm(POSICAO_ABSOLUTA ~ IDH + IDH_RENDA + IDH_LONGEVIDADE + IDH_EDUCACAO + 
+     GENERO_F + TIPO_ESCOLA_M + TIPO_ESCOLA_E + TIPO_ESCOLA_C + TIPO_ESCOLA_F,
+   data = dados_modelar %>% dplyr::select(-c(ANO, NIVEL))) -> modelo1
+
+pairs(dados_modelar)
+
+modelo1 |> summary() 
+
+#cov(dados_modelar %>% dplyr::select(IDH, IDH_RENDA, IDH_LONGEVIDADE, IDH_EDUCACAO))
+
+modelo1 |> anova()
+```
+
+
+```{r}
+#Modelo de regressão logística ordinal
+
+
+#library(MASS)
+#dados_new = dados[dados$ESTRUTURA_ESCOLA == "Pública",]
+#dados_new = dados_new[dados_new$NIVEL == 3,]
+#dados_new = dados_new[,c(4, 8, 13, 20:22)]
+
+#modelo = polr(data = dados_new, formula = MEDALHA ~ .)
+
+#print(modelo)
+```
+
+```{r}
+escolas = dados[,c(6,11,12)] |> distinct()
+
+write.csv(escolas, "Bancos/escolas.csv")
+```
+
+
+```{r}
+dados = read_excel("Bancos/dados_completos.xlsx")
+
+coord_escolas = read_csv("Bancos/coordenadas_escolas.csv")
+
+coord_escolas = coord_escolas[,-1]
+
+dados_completos = left_join(dados, coord_escolas, by = c("ESCOLA", "MUNICIPIO", "UF"))
+
+dados_completos = dados_completos[,-c(16,17)]
+
+colnames(dados_completos)[23:24] = c("LONGITUDE", "LATITUDE")
+```
+
+```{r}
+dados_graph = dados_completos %>% 
+  na.omit() %>% 
+  filter(MEDALHA == "Ouro") %>% 
+  group_by(LATITUDE, LONGITUDE) %>% 
+  summarise(count = n()) %>% 
+  ungroup() %>% 
+  na.omit()
+
+leaflet(dados_graph) %>%
+  addTiles() %>%
+  addHeatmap(
+    ~LATITUDE, ~LONGITUDE, 
+    intensity = ~sqrt(count),
+    blur = 10, max = ~max(sqrt(count))
+  ) -> mapa_gradient
+
+print(mapa_gradient)
+```
+

@@ -1,0 +1,28 @@
+# R / RStudio
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+
+# Credenciais (ver secrets/README.md)
+secrets/*
+!secrets/README.md
+!secrets/.gitignore
+!secrets/**/*.example
+.env
+.Renviron
+.secret/
+
+# Malha e pacotes grandes (IBGE)
+# https://www.ibge.gov.br/geociencias/organizacao-do-territorio/malhas-territoriais
+*.rar
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+
+rsconnect/
+
+.DS_Store
+Thumbs.db
